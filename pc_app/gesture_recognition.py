@@ -95,9 +95,17 @@ hands = mp_hands.Hands(
 # Tạo công cụ vẽ các chấm và các khớp
 mp_draw = mp.solutions.drawing_utils
 
+# Thêm các biến giúp UI luôn xuất hiện, tránh hiện tượng Flicker
+display_raw = 0
+display_filtered = 0
+display_zone = "No hand"
+last_hand_time = 0
+
 last_send_time = 0
 
-brightness_filter = OneEuroFilter(min_cutoff = 0.1, beta = 0.5)
+# Nếu min_cutoff quá thấp -> gây ra hiện tượng trễ (đèn sẽ tắt chậm)
+
+brightness_filter = OneEuroFilter(min_cutoff = 0.01, beta = 0.4)
 
 def send_udp_command(r, g, b):
     global last_send_time # Chuyển biến last_send_time thành biến toàn cục
@@ -121,7 +129,8 @@ def send_udp_command(r, g, b):
         pass # Nếu lỗi thì không bị crash mà chỉ in ra
 
 def main():
-    
+    global last_hand_time, display_filtered, display_raw, display_zone
+
     cap = cv2.VideoCapture(0) # Bật webcam mặc định (VideoCapture(0))
 
     print("System started! Press 'q' to exit.")
@@ -134,6 +143,8 @@ def main():
         success, img = cap.read() # Chụp một khung hình, hệ thống sẽ tự động chụp khoảng 60 khung mỗi giây
         if not success: break # Nếu không có frame nào sẽ tiến hành thoát
 
+        # Thêm bộ lọc gauss để tôi ưu xử lý nhiễu
+        img = cv2.GaussianBlur(img, (5, 5), 0)
         # Lật ảnh để tránh hiện tượng gương 
         img = cv2.flip(img, 1)
         
@@ -158,9 +169,11 @@ def main():
                     # Chuyển tọa độ chuẩn hóa sang pixel 
                     cx, cy = int(lm.x * w), int(lm.y * h)
                     lm_list.append([id, cx, cy]) # Thêm vào list id ngón, tọa độ x và y (theo pixel)
-                # VD: {}
-        
+        # 
         if len(lm_list) != 0:
+            
+            last_hand_time = time.time() # Cập nhật thời gian nhìn thấy tay
+            
             # Lấy tọa độ x, y của ngón cái [4] và ngón trỏ [8] để tinh chỉnh độ sáng đèn theo công thức euclid
             x1, y1 = lm_list[4][1], lm_list[4][2]
             x2, y2 = lm_list[8][1], lm_list[8][2]
@@ -184,25 +197,38 @@ def main():
             # Logic vùng màu
             wrist_x = lm_list[0][1] # Lấy tọa độ x của cổ tay
             w_screen = img.shape[1] # Chiều rộng ảnh, 640x480 thì lấy 640
-            zone = ""
+
             r, g, b = 0, 0, 0
+
+            # Cập nhật lại biến hiển thị
+            display_raw = int(raw_brightness) # Hiển thị giá trị raw (giá trị thô)
+            display_filtered = current_val # Hiển thị giá trị one-euro (giá trị sau lọc)
+
             if wrist_x < w_screen / 3:
                 r, g, b = current_val, 0, 0
-                zone = "RED (Left)"
+                display_zone = "RED (Left)"
             elif wrist_x < 2 * w_screen / 3:
                 r, g, b = 0, current_val, 0
-                zone = "GREEN (Center)"
+                display_zone = "GREEN (Center)"
             else:
                 r, g, b = 0, 0, current_val
-                zone = "BLUE (Right)"
+                display_zone = "BLUE (Right)"
             
             send_udp_command(r, g, b)
-
-            cv2.putText(img, f"Raw: {int(raw_brightness)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-            cv2.putText(img, f"OneEuro: {current_val}", (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-            cv2.putText(img, f"Zone: {zone}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+            # Nếu đặt các dòng cv2.putText ở trong câu lệnh if trên thì sẽ gây ra hiện tượng chớp khi cổ tay chuyển sang zone khác
         
-        cv2.imshow("One-Euro Filter Control", img)
+        # Kiểm tra nếu quá 2s thì đặt các biến về trạng thái đầu
+        if time.time() - last_hand_time > 2.0:
+            display_zone = "No hand....."
+            display_raw = 0
+            display_filtered = 0
+        
+        # Đặt các dòng cv2.putText ở đây để đảm bảo luôn hiển thị các dòng raw, one-euro và zone màu
+        cv2.putText(img, f"Raw: {display_raw}", (10, 30), 1, 1.5, (0, 0, 255), 2)
+        cv2.putText(img, f"OneEuro: {display_filtered}", (10, 60), 1, 1.5, (0, 255, 0), 2)
+        cv2.putText(img, f"Zone: {display_zone}", (10, 90), 1, 1.5, (255, 255, 0), 2)
+        
+        cv2.imshow("Hand Gesture (Update no Flicker)!", img)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
     cap.release()
     cv2.destroyAllWindows()

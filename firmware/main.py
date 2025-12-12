@@ -4,17 +4,17 @@ import machine
 import neopixel
 import json
 
-# --- CẤU HÌNH ---
+# Cấu hình cần thiết
 UDP_PORT = 4210
 NEO_PIN = 2
 NUMPIXELS = 12
-# --- KHỞI TẠO ---
+# Kiểm tra có cấu hình NeoPixel từ file boot.py chưa, nếu chưa thì tạo
 try:
     np
 except NameError:
     np = neopixel.NeoPixel(machine.Pin(NEO_PIN), NUMPIXELS)
 
-# --- KHỞI TẠO UDP ---
+# Tạo gói UDP
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.bind(('0.0.0.0', UDP_PORT))
 s.setblocking(False)
@@ -26,7 +26,7 @@ last_msg_time = time.time()
 last_debug_print = time.time() # Biến để in debug
 
 while True:
-    # --- PHẦN DEBUG: In ra màn hình mỗi 2 giây để biết chip còn sống ---
+    # In ra màn hình mỗi 2 giây để biết chip còn sống 
     if time.time() - last_debug_print > 2:
         print("Dang doi tin hieu tu may tinh...")
         last_debug_print = time.time()
