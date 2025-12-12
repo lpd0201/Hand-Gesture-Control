@@ -6,8 +6,6 @@ import math
 import json
 import numpy as np
 
-# VẪN CÒN BỊ NHIỄU
-
 # Bộ lọc One-euro filter 
 # + Tay giữ yên -> Lọc tối đa
 # + Tay vẩy nhanh -> Lọc tối thiểu
@@ -55,7 +53,7 @@ class OneEuroFilter:
         
         dx = (x - self.x_prev) / time_elapsed # Tính vận tốc thô, công thức v = (x - x0) / time_elapsed
         
-        dx_hat = self.exponential_smoothing(a_d, dx, self.dx_prev) # Làm mượt vận tốc thô (dx), dùng cho tính tần số cắt
+        dx_hat = self.exponential_smoothing(a_d, dx, self.dx_prev) # Làm mượt vận tốc thô (dx), dùng cho việc tính tần số cắt
 
     # 2. Tính tần số cắt thích ứng (cutoff)
         
@@ -76,7 +74,7 @@ class OneEuroFilter:
 
         return x_hat
 
-# Cấu hình
+# Cấu hình IP và PORT của esp32-c3 
 ESP_IP = "10.49.247.217"
 ESP_PORT = 4210
 
@@ -87,11 +85,11 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 mp_hands = mp.solutions.hands
 
 hands = mp_hands.Hands(
-    static_image_mode = False, 
+    static_image_mode = False, # Đặt False -> chỉ kích hoạt chế độ theo dõi khi mất dấu tay
     max_num_hands = 1, 
-    model_complexity = 1, # Độ phức tạp mô hình AI, 1 là mode full
-    min_detection_confidence = 0.7, # Ngưỡng tin cậy khi phát hiện
-    min_tracking_confidence = 0.7 # Ngưỡng tin cậy khi theo dõi chuyển động
+    model_complexity = 1, # Độ phức tạp mô hình AI, mức 1 độ chính xác cao nhưng hơi chậm
+    min_detection_confidence = 0.8, # Ngưỡng tin cậy khi phát hiện
+    min_tracking_confidence = 0.8 # Ngưỡng tin cậy khi theo dõi chuyển động
 )
 
 # Tạo công cụ vẽ các chấm và các khớp
@@ -99,11 +97,10 @@ mp_draw = mp.solutions.drawing_utils
 
 last_send_time = 0
 
-brightness_filter = OneEuroFilter(min_cutoff = 0.01, beta = 0.5)
-
+brightness_filter = OneEuroFilter(min_cutoff = 0.1, beta = 0.5)
 
 def send_udp_command(r, g, b):
-    global last_send_time # Chuyển biến last_send_time thành biến toàn cục (như con trỏ trong C)
+    global last_send_time # Chuyển biến last_send_time thành biến toàn cục
     # Chỉ gửi lệnh mỗi 50ms (20 lần/s) để tránh esp bị ngộp
     if time.time() - last_send_time < 0.05:
         return
@@ -137,46 +134,50 @@ def main():
         success, img = cap.read() # Chụp một khung hình, hệ thống sẽ tự động chụp khoảng 60 khung mỗi giây
         if not success: break # Nếu không có frame nào sẽ tiến hành thoát
 
-        # Lật ảnh để tránh hiện tượng gương
+        # Lật ảnh để tránh hiện tượng gương 
         img = cv2.flip(img, 1)
         
-        # Chuyển từ bgr của opencv sang rgb trong mediapipe
+        # OpenCV đọc ảnh với không gian màu mặc định sẽ là BGR, cần chuyển sang RGB
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         
         # Gửi ảnh đã chuyển đổi cho AI xử lý
         results = hands.process(img_rgb)
 
         lm_list = [] # Danh sách rỗng chứa tọa độ ngón tay
+        # Tọa độ của các ngón tay trong MediaPipe Hands : 
+        # 0, 4, 8, 12, 16, 20 tương ứng cổ tay, ngón cái, trỏ, giữa, áp út và ngón út
 
-        # Mediapipe sẽ trả về tọa độ được chuẩn hóa (0, 1), ta cần chuyển sang tọa độ pixel
+        # Các đối tượng trong multi_hand_landmarks sẽ trả về tọa độ được chuẩn hóa (0, 1), ta cần chuyển sang tọa độ pixel
         if results.multi_hand_landmarks:
             for hand_lms in results.multi_hand_landmarks:
                 # Vẽ các khớp và đốt tay
                 mp_draw.draw_landmarks(img, hand_lms, mp_hands.HAND_CONNECTIONS)
                 # Duyệt qua tọa độ x, y và trả về xem đó là ngón nào
-                # ID = 4 -> ngón cái, ...
                 for id, lm in enumerate(hand_lms.landmark):
-                    h, w, c = img.shape # lấy kích thước thực tế của cửa sổ camera
+                    h, w, c = img.shape # lấy kích thước thực tế của cửa sổ camera, w, h lần lượt là chiều rộng, chiều cao ảnh
                     # Chuyển tọa độ chuẩn hóa sang pixel 
                     cx, cy = int(lm.x * w), int(lm.y * h)
-                    lm_list.append([id, cx, cy]) # Thêm vào list id ngón, tọa độ x và y (theo pixels)
+                    lm_list.append([id, cx, cy]) # Thêm vào list id ngón, tọa độ x và y (theo pixel)
+                # VD: {}
+        
         if len(lm_list) != 0:
-            # Lấy tọa độ x, y của ngón cái [4] và ngón trỏ [8]
+            # Lấy tọa độ x, y của ngón cái [4] và ngón trỏ [8] để tinh chỉnh độ sáng đèn theo công thức euclid
             x1, y1 = lm_list[4][1], lm_list[4][2]
             x2, y2 = lm_list[8][1], lm_list[8][2]
 
-            # Vẽ đường nối giữa 2 ngón và 2 chấm tròn
-            cv2.circle(img, (x1, y1), 10, (178, 0, 255), cv2.FILLED)
-            cv2.circle(img, (x2, y2), 10, (178, 0, 255), cv2.FILLED)
-            cv2.line(img, (x1, y1), (x2, y2), (178, 0, 255), 3)
+            # Vẽ đường nối giữa 2 ngón và 2 chấm tròn trên đầu ngón cái và trỏ
+            cv2.circle(img, (x1, y1), 10, (100, 0, 255), cv2.FILLED)
+            cv2.circle(img, (x2, y2), 10, (100, 0, 255), cv2.FILLED)
+            cv2.line(img, (x1, y1), (x2, y2), (100, 0, 255), 3)
 
             # Tính độ sáng bằng cách di chuyển ngón cái và trỏ bằng khoảng cách Euclid
             # Trả về length tính theo pixel 
-            length = math.hypot(x2 - x1, y2 - y1) # Tính độ lớn nên không quan trọng thứ tự
+            length = math.hypot(x2 - x1, y2 - y1) 
             # Hàm nội suy
-            raw_brightness = np.interp(length, [30, 200], [0, 255])
+            raw_brightness = np.interp(length, [30, 200], [0, 255]) # Tính toán thô khoảng cách pixel giữa 2 ngón
 
-            # Bộ lọc One-euro filter thay cho EMA
+            # Bộ lọc One-euro filter
+            # Sau khi nội suy được khoảng cách, ta đưa nó vào bộ lọc để lọc tín hiệu
             filtered_brightness = brightness_filter.process(raw_brightness)
             current_val = int(filtered_brightness)
 
@@ -202,7 +203,7 @@ def main():
             cv2.putText(img, f"Zone: {zone}", (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
         
         cv2.imshow("One-Euro Filter Control", img)
-        if cv2.waitKey(1) and 0xFF == ord('q'): break
+        if cv2.waitKey(1) & 0xFF == ord('q'): break
     cap.release()
     cv2.destroyAllWindows()
 if __name__ == "__main__":

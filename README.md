@@ -1,4 +1,4 @@
-## Project Description: Smart light controlled by gesture recognition using Python (MediaPipe) and ESP32-C3
+## Smart light controlled by gesture recognition using Python (MediaPipe) and ESP32-C3
 
 ![Project Status](https://img.shields.io/badge/Status-Completed-success)
 
@@ -15,30 +15,29 @@ Mục tiêu của dự án này là tìm hiểu về quá trình xử lý ảnh,
 * **Kết nối:** Giao tiếp không dây qua giao thức UDP (User Datagram Protocol).
 
 ### 📄 Phần mềm, Thư viện và các công thức được sử dụng:
-* *Python 3x., OpenCV, MediaPipe, AdaFruit_NeoPixel*
-**Bộ lọc Exponential Moving Average (EMA):**
-$$
-    Y_t = \alpha \cdot X_t + (1 - \alpha) \cdot Y_{t - 1}
-$$
+**Python 3x., OpenCV, MediaPipe, AdaFruit_NeoPixel**
+----
+
+#### 1. Bộ lọc Exponential Moving Average (EMA):
+$$Y_t = \alpha \cdot X_t + (1 - \alpha) \cdot Y_{t - 1}$$
+
 Trong đó: 
-- $$Y_t$$ là giá trị lọc hiện tại
-- $$\alpha (0 < \alpha < 1)$$ là hệ số làm mượt 
-- $$Y_{t - 1}$$ giá trị đã lọc trước đó
-- $$X_n$$ là giá trị thô hiện tại vừa đọc được từ MediaPipe
-
-**Bộ lọc One-Euro (One-Euro Filter):** Phụ thuộc nhiều vào tần số cắt (cutoff frequency) $$ f_c $$
-$$
-    f_c = f_min + \beta \cdot \abs(dx)
-$$
+- $Y_t$: Giá trị lọc hiện tại
+- $\alpha (0 < \alpha < 1)$: Hệ số làm mượt 
+- $Y_{t - 1}$: Giá trị đã lọc trước đó
+- $X_n$: Giá trị thô hiện tại vừa đọc được từ MediaPipe
+#### 2. Bộ lọc One-Euro (One-Euro Filter):
+$$f_c = f_{min} + \beta \cdot |dx|$$
 Trong đó:
-- $$f_c$$ là tần số cắt thực tế. $$f_c$$ càng nhỏ lọc càng mạnh và ngược lại.
-- $$f_min$$ là tần số cắt tối thiểu.
-- dx là tốc độ di chuyển của ngón tay(pixel/giây).
-- $$\beta$$ là hệ số nhạy
-Nếu dx càng nhỏ thì $$f_c$$ xấp xỉ bằng $$f_min$$ -> Lọc kỹ.
-Nếu dx càng lớn thì $$f_c$$ tăng vọt -> Bỏ qua lọc.
+- $f_c$: Tần số cắt thực tế. $f_c$ càng nhỏ lọc càng mạnh và ngược lại.
+- $f_{min}$: Tần số cắt tối thiểu.
+- $dx$: Tốc độ di chuyển của ngón tay(pixel/giây).
+- $\beta$: Hệ số nhạy
+**Cơ chế:** 
+> - Nếu $dx$ càng nhỏ (tay đứng yên) $\rightarrow$ $f_c \approx f_{min}$ $\rightarrow$ Lọc kỹ (chống rung).
+> - Nếu $dx$ càng lớn (vẩy tay nhanh) $\rightarrow$ $f_c$ tăng vọt $\rightarrow$ Giảm lọc (phản hồi nhanh).
 
-**Đổi từ tần số cắt thực tế $f_c$ sang hệ số làm mượt $\alpha$:**
+#### 3. Đổi từ tần số cắt thực tế $f_c$ sang hệ số làm mượt $\alpha$:
 Ta có:
 $$\alpha = \frac{2 \pi f_c \Delta t}{1 + 2 \pi f_c \Delta t}$$
 Đặt: $$r = 2 \pi f_c \Delta T$$
@@ -52,7 +51,7 @@ Tự tìm hiểu các kiến thức về OpenCV, MediaPipe và các kỹ thuật
 1. **Computer Vision:** Biết cách sử dụng các model AI có sẵn, biết cách trích xuất tọa độ `(x, y)` của của 21 điểm mốc trên bàn tay. Hiểu về hiện tượng nhiễu, rung trong xử lý ảnh và các cách giải quyết đơn giản.
 2. **Data Serialization:** Học cách đóng gói dữ liệu từ Python và gửi về ESP32-C3 bằng giao thức UDP (User Datagram Protocol).
  
-**👤 Author:** *Ly Phuc Duong*
+**👤 Author:** Ly Phuc Duong
 **🎓 University:**  HCMUTE - Faculty of Electrical and Electronics Engineering
    
 ## 📞 Get in touch:
