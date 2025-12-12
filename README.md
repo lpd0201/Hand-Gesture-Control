@@ -6,8 +6,6 @@
 
 Dự án này được xây dựng nhằm mục đích nghiên cứu về **Computer Vision** và ứng dụng **AI** trong IoT, với sự hỗ trợ của trợ lý AI (Gemini). Hệ thống sử dụng thư viện **MediaPipe** để trích xuất tọa độ bàn tay, áp dụng các **thuật toán lọc nhiễu tín hiệu số** để xử lý dữ liệu.
 
----
-
 > **Tính năng nổi bật:**
 > * Tracking bàn tay thời gian thực (Real-time).
 > * Điều chỉnh độ sáng mượt mà, không bị giật (Jitter-free).
